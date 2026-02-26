@@ -55,6 +55,16 @@ func NewAgentInstance(
 	toolsRegistry.Register(tools.NewEditFileTool(workspace, restrict))
 	toolsRegistry.Register(tools.NewAppendFileTool(workspace, restrict))
 
+	// Register Affine tool if enabled
+	if cfg.Tools.Affine.Enabled {
+		toolsRegistry.Register(tools.NewAffineTool(tools.AffineToolOptions{
+			APIURL:         cfg.Tools.Affine.APIURL,
+			APIKey:         cfg.Tools.Affine.APIKey,
+			WorkspaceID:    cfg.Tools.Affine.WorkspaceID,
+			TimeoutSeconds: cfg.Tools.Affine.TimeoutSeconds,
+		}))
+	}
+
 	sessionsDir := filepath.Join(workspace, "sessions")
 	sessionsManager := session.NewSessionManager(sessionsDir)
 

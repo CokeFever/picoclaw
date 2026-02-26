@@ -467,11 +467,20 @@ type ExecConfig struct {
 	CustomDenyPatterns []string `json:"custom_deny_patterns" env:"PICOCLAW_TOOLS_EXEC_CUSTOM_DENY_PATTERNS"`
 }
 
+type AffineConfig struct {
+	Enabled        bool   `json:"enabled"         env:"PICOCLAW_TOOLS_AFFINE_ENABLED"`
+	APIURL         string `json:"api_url"         env:"PICOCLAW_TOOLS_AFFINE_API_URL"`
+	APIKey         string `json:"api_key"         env:"PICOCLAW_TOOLS_AFFINE_API_KEY"`
+	WorkspaceID    string `json:"workspace_id"    env:"PICOCLAW_TOOLS_AFFINE_WORKSPACE_ID"`
+	TimeoutSeconds int    `json:"timeout_seconds" env:"PICOCLAW_TOOLS_AFFINE_TIMEOUT_SECONDS"`
+}
+
 type ToolsConfig struct {
 	Web    WebToolsConfig    `json:"web"`
 	Cron   CronToolsConfig   `json:"cron"`
 	Exec   ExecConfig        `json:"exec"`
 	Skills SkillsToolsConfig `json:"skills"`
+	Affine AffineConfig      `json:"affine"`
 }
 
 type SkillsToolsConfig struct {
