@@ -222,6 +222,7 @@ func (t *AffineSimpleTool) callMCP(ctx context.Context, reqBody map[string]inter
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Authorization", "Bearer "+t.apiKey)
 
 	resp, err := t.httpClient.Do(req)
