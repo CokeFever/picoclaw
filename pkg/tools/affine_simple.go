@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -231,13 +232,21 @@ func (t *AffineSimpleTool) callMCP(ctx context.Context, reqBody map[string]inter
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Check if response is SSE (text/event-stream)
+	contentType := resp.Header.Get("Content-Type")
+	if strings.Contains(contentType, "text/event-stream") {
+		return t.parseSSEResponse(resp.Body)
+	}
+
+	// Otherwise parse as JSON
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
 	var mcpResp struct {
@@ -250,6 +259,45 @@ func (t *AffineSimpleTool) callMCP(ctx context.Context, reqBody map[string]inter
 
 	if err := json.Unmarshal(body, &mcpResp); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	if mcpResp.Error != nil {
+		return nil, fmt.Errorf("MCP error %d: %s", mcpResp.Error.Code, mcpResp.Error.Message)
+	}
+
+	return mcpResp.Result, nil
+}
+
+func (t *AffineSimpleTool) parseSSEResponse(body io.Reader) (interface{}, error) {
+	// Read SSE stream and extract the final JSON-RPC response
+	scanner := bufio.NewScanner(body)
+	var lastEvent string
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "data: ") {
+			lastEvent = strings.TrimPrefix(line, "data: ")
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read SSE stream: %w", err)
+	}
+
+	if lastEvent == "" {
+		return nil, fmt.Errorf("no data in SSE stream")
+	}
+
+	var mcpResp struct {
+		Result interface{} `json:"result"`
+		Error  *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	if err := json.Unmarshal([]byte(lastEvent), &mcpResp); err != nil {
+		return nil, fmt.Errorf("decode SSE data: %w", err)
 	}
 
 	if mcpResp.Error != nil {
