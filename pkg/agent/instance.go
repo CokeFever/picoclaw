@@ -56,24 +56,13 @@ func NewAgentInstance(
 	toolsRegistry.Register(tools.NewAppendFileTool(workspace, restrict))
 
 	// Register Affine tool if enabled
-	if cfg.Tools.Affine.Enabled {
-		// Use simple HTTP MCP endpoint if provided
-		if cfg.Tools.Affine.MCPEndpoint != "" {
-			toolsRegistry.Register(tools.NewAffineSimpleTool(tools.AffineSimpleToolOptions{
-				MCPEndpoint:    cfg.Tools.Affine.MCPEndpoint,
-				APIKey:         cfg.Tools.Affine.APIKey,
-				WorkspaceID:    cfg.Tools.Affine.WorkspaceID,
-				TimeoutSeconds: cfg.Tools.Affine.TimeoutSeconds,
-			}))
-		} else {
-			// Fallback to GraphQL (if implemented)
-			toolsRegistry.Register(tools.NewAffineTool(tools.AffineToolOptions{
-				APIURL:         cfg.Tools.Affine.APIURL,
-				APIKey:         cfg.Tools.Affine.APIKey,
-				WorkspaceID:    cfg.Tools.Affine.WorkspaceID,
-				TimeoutSeconds: cfg.Tools.Affine.TimeoutSeconds,
-			}))
-		}
+	if cfg.Tools.Affine.Enabled && cfg.Tools.Affine.MCPEndpoint != "" {
+		toolsRegistry.Register(tools.NewAffineSimpleTool(tools.AffineSimpleToolOptions{
+			MCPEndpoint:    cfg.Tools.Affine.MCPEndpoint,
+			APIKey:         cfg.Tools.Affine.APIKey,
+			WorkspaceID:    cfg.Tools.Affine.WorkspaceID,
+			TimeoutSeconds: cfg.Tools.Affine.TimeoutSeconds,
+		}))
 	}
 
 	sessionsDir := filepath.Join(workspace, "sessions")
