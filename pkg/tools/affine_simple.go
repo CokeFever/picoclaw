@@ -118,11 +118,13 @@ func (t *AffineSimpleTool) search(ctx context.Context, query string) *ToolResult
 	}
 
 	// Parse search results
-	var searchResults []struct {
-		DocID   string `json:"docId"`
-		Title   string `json:"title"`
-		Snippet string `json:"snippet"`
+	type SearchDoc struct {
+		DocID     string `json:"docId"`
+		Title     string `json:"title"`
+		Snippet   string `json:"snippet,omitempty"`
+		CreatedAt string `json:"createdAt,omitempty"`
 	}
+	var searchResults []SearchDoc
 
 	// Try to extract from result
 	if resultMap, ok := result.(map[string]interface{}); ok {
@@ -130,14 +132,16 @@ func (t *AffineSimpleTool) search(ctx context.Context, query string) *ToolResult
 			for _, item := range content {
 				if itemMap, ok := item.(map[string]interface{}); ok {
 					if text, ok := itemMap["text"].(string); ok {
-						// Parse the text as JSON
-						var docs []struct {
-							DocID   string `json:"docId"`
-							Title   string `json:"title"`
-							Snippet string `json:"snippet"`
-						}
-						if err := json.Unmarshal([]byte(text), &docs); err == nil {
-							searchResults = append(searchResults, docs...)
+						// Try parsing as single object first
+						var doc SearchDoc
+						if err := json.Unmarshal([]byte(text), &doc); err == nil {
+							searchResults = append(searchResults, doc)
+						} else {
+							// Try parsing as array
+							var docs []SearchDoc
+							if err := json.Unmarshal([]byte(text), &docs); err == nil {
+								searchResults = append(searchResults, docs...)
+							}
 						}
 					}
 				}
@@ -188,11 +192,13 @@ func (t *AffineSimpleTool) semanticSearch(ctx context.Context, query string) *To
 	}
 
 	// Parse search results (same format as keyword search)
-	var searchResults []struct {
-		DocID   string `json:"docId"`
-		Title   string `json:"title"`
-		Snippet string `json:"snippet"`
+	type SearchDoc struct {
+		DocID     string `json:"docId"`
+		Title     string `json:"title"`
+		Snippet   string `json:"snippet,omitempty"`
+		CreatedAt string `json:"createdAt,omitempty"`
 	}
+	var searchResults []SearchDoc
 
 	// Try to extract from result
 	if resultMap, ok := result.(map[string]interface{}); ok {
@@ -200,14 +206,16 @@ func (t *AffineSimpleTool) semanticSearch(ctx context.Context, query string) *To
 			for _, item := range content {
 				if itemMap, ok := item.(map[string]interface{}); ok {
 					if text, ok := itemMap["text"].(string); ok {
-						// Parse the text as JSON
-						var docs []struct {
-							DocID   string `json:"docId"`
-							Title   string `json:"title"`
-							Snippet string `json:"snippet"`
-						}
-						if err := json.Unmarshal([]byte(text), &docs); err == nil {
-							searchResults = append(searchResults, docs...)
+						// Try parsing as single object first
+						var doc SearchDoc
+						if err := json.Unmarshal([]byte(text), &doc); err == nil {
+							searchResults = append(searchResults, doc)
+						} else {
+							// Try parsing as array
+							var docs []SearchDoc
+							if err := json.Unmarshal([]byte(text), &docs); err == nil {
+								searchResults = append(searchResults, docs...)
+							}
 						}
 					}
 				}
