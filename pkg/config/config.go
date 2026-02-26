@@ -473,6 +473,7 @@ type AffineConfig struct {
 	APIKey         string `json:"api_key"         env:"PICOCLAW_TOOLS_AFFINE_API_KEY"`
 	WorkspaceID    string `json:"workspace_id"    env:"PICOCLAW_TOOLS_AFFINE_WORKSPACE_ID"`
 	TimeoutSeconds int    `json:"timeout_seconds" env:"PICOCLAW_TOOLS_AFFINE_TIMEOUT_SECONDS"`
+	MCPEndpoint    string `json:"mcp_endpoint"    env:"PICOCLAW_TOOLS_AFFINE_MCP_ENDPOINT"` // Optional: direct MCP endpoint URL
 }
 
 type ToolsConfig struct {

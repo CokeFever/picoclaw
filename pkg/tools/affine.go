@@ -11,43 +11,43 @@ import (
 	"time"
 )
 
-// AffineClient handles GraphQL communication with Affine API
+// AffineClient handles MCP communication with Affine API
 type AffineClient struct {
-	apiURL     string
+	baseURL    string
 	apiKey     string
 	httpClient *http.Client
 }
 
-// GraphQL request/response structures
-type graphQLRequest struct {
-	Query     string                 `json:"query"`
-	Variables map[string]interface{} `json:"variables,omitempty"`
+// MCP request/response structures
+type mcpRequest struct {
+	Method string                 `json:"method"`
+	Params map[string]interface{} `json:"params,omitempty"`
 }
 
-type graphQLResponse struct {
-	Data   json.RawMessage   `json:"data"`
-	Errors []graphQLError    `json:"errors,omitempty"`
+type mcpResponse struct {
+	Result json.RawMessage `json:"result,omitempty"`
+	Error  *mcpError       `json:"error,omitempty"`
 }
 
-type graphQLError struct {
+type mcpError struct {
+	Code    int    `json:"code"`
 	Message string `json:"message"`
-	Path    []any  `json:"path,omitempty"`
 }
 
-func newAffineClient(apiURL, apiKey string, timeout time.Duration) *AffineClient {
+func newAffineClient(baseURL, apiKey string, timeout time.Duration) *AffineClient {
 	return &AffineClient{
-		apiURL: apiURL,
-		apiKey: apiKey,
+		baseURL: baseURL,
+		apiKey:  apiKey,
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
 	}
 }
 
-func (c *AffineClient) query(ctx context.Context, query string, variables map[string]interface{}) (json.RawMessage, error) {
-	reqBody := graphQLRequest{
-		Query:     query,
-		Variables: variables,
+func (c *AffineClient) call(ctx context.Context, method string, params map[string]interface{}) (json.RawMessage, error) {
+	reqBody := mcpRequest{
+		Method: method,
+		Params: params,
 	}
 
 	bodyBytes, err := json.Marshal(reqBody)
@@ -55,7 +55,7 @@ func (c *AffineClient) query(ctx context.Context, query string, variables map[st
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.apiURL, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -78,16 +78,16 @@ func (c *AffineClient) query(ctx context.Context, query string, variables map[st
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
-	var gqlResp graphQLResponse
-	if err := json.Unmarshal(body, &gqlResp); err != nil {
+	var mcpResp mcpResponse
+	if err := json.Unmarshal(body, &mcpResp); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
-	if len(gqlResp.Errors) > 0 {
-		return nil, fmt.Errorf("graphql error: %s", gqlResp.Errors[0].Message)
+	if mcpResp.Error != nil {
+		return nil, fmt.Errorf("MCP error %d: %s", mcpResp.Error.Code, mcpResp.Error.Message)
 	}
 
-	return gqlResp.Data, nil
+	return mcpResp.Result, nil
 }
 
 // AffineTool provides access to Affine workspace operations
@@ -122,7 +122,7 @@ func (t *AffineTool) Name() string {
 }
 
 func (t *AffineTool) Description() string {
-	return "Interact with Affine workspace: list/search pages, read page content, create/update notes with tags and structure. Use this to manage your knowledge base in Affine."
+	return "Interact with Affine workspace via MCP: search pages, read page content, list documents. Use this to access your knowledge base in Affine."
 }
 
 func (t *AffineTool) Parameters() map[string]any {
@@ -132,36 +132,19 @@ func (t *AffineTool) Parameters() map[string]any {
 			"action": map[string]any{
 				"type": "string",
 				"enum": []string{
-					"list_workspaces",
-					"list_pages",
 					"search",
-					"read_page",
-					"create_page",
-					"update_page",
-					"get_structure",
+					"read_doc",
+					"list_docs",
 				},
-				"description": "Action to perform",
+				"description": "Action to perform (MCP server supports: search, read_doc, list_docs)",
 			},
 			"workspace_id": map[string]any{
 				"type":        "string",
 				"description": "Workspace ID (optional, uses default if not specified)",
 			},
-			"page_id": map[string]any{
+			"doc_id": map[string]any{
 				"type":        "string",
-				"description": "Page ID (required for read_page, update_page)",
-			},
-			"title": map[string]any{
-				"type":        "string",
-				"description": "Page title (required for create_page, optional for update_page)",
-			},
-			"content": map[string]any{
-				"type":        "string",
-				"description": "Page content in markdown format (for create_page, update_page)",
-			},
-			"tags": map[string]any{
-				"type":        "array",
-				"items":       map[string]any{"type": "string"},
-				"description": "Tags to add to the page",
+				"description": "Document ID (required for read_doc)",
 			},
 			"query": map[string]any{
 				"type":        "string",
@@ -191,42 +174,151 @@ func (t *AffineTool) Execute(ctx context.Context, args map[string]any) *ToolResu
 	}
 
 	switch action {
-	case "list_workspaces":
-		return t.listWorkspaces(ctx)
-	case "list_pages":
-		return t.listPages(ctx, workspaceID, args)
 	case "search":
 		query, ok := args["query"].(string)
 		if !ok {
 			return ErrorResult("query is required for search")
 		}
-		return t.searchPages(ctx, workspaceID, query, args)
-	case "read_page":
-		pageID, ok := args["page_id"].(string)
+		return t.searchDocs(ctx, workspaceID, query, args)
+	case "read_doc":
+		docID, ok := args["doc_id"].(string)
 		if !ok {
-			return ErrorResult("page_id is required for read_page")
+			return ErrorResult("doc_id is required for read_doc")
 		}
-		return t.readPage(ctx, workspaceID, pageID)
-	case "create_page":
-		title, ok := args["title"].(string)
-		if !ok {
-			return ErrorResult("title is required for create_page")
-		}
-		return t.createPage(ctx, workspaceID, title, args)
-	case "update_page":
-		pageID, ok := args["page_id"].(string)
-		if !ok {
-			return ErrorResult("page_id is required for update_page")
-		}
-		return t.updatePage(ctx, workspaceID, pageID, args)
-	case "get_structure":
-		return t.getStructure(ctx, workspaceID)
+		return t.readDoc(ctx, workspaceID, docID)
+	case "list_docs":
+		return t.listDocs(ctx, workspaceID, args)
 	default:
-		return ErrorResult(fmt.Sprintf("unknown action: %s", action))
+		return ErrorResult(fmt.Sprintf("unknown action: %s (supported: search, read_doc, list_docs)", action))
 	}
 }
 
-func (t *AffineTool) listWorkspaces(ctx context.Context) *ToolResult {
+func (t *AffineTool) searchDocs(ctx context.Context, workspaceID, query string, args map[string]any) *ToolResult {
+	limit := 10
+	if l, ok := args["limit"].(float64); ok {
+		limit = int(l)
+	}
+
+	params := map[string]interface{}{
+		"query": query,
+		"limit": limit,
+	}
+
+	data, err := t.client.call(ctx, "doc-keyword-search", params)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("failed to search: %v", err))
+	}
+
+	var results []struct {
+		DocID   string `json:"docId"`
+		Title   string `json:"title"`
+		Snippet string `json:"snippet"`
+	}
+
+	if err := json.Unmarshal(data, &results); err != nil {
+		return ErrorResult(fmt.Sprintf("failed to parse response: %v", err))
+	}
+
+	if len(results) == 0 {
+		return &ToolResult{
+			ForLLM:  fmt.Sprintf("No results found for: %s", query),
+			ForUser: fmt.Sprintf("No results found for: %s", query),
+		}
+	}
+
+	var lines []string
+	lines = append(lines, fmt.Sprintf("Search results for '%s' (%d found):", query, len(results)))
+	for i, item := range results {
+		lines = append(lines, fmt.Sprintf("%d. %s (ID: %s)", i+1, item.Title, item.DocID))
+		if item.Snippet != "" {
+			lines = append(lines, fmt.Sprintf("   %s", item.Snippet))
+		}
+	}
+
+	output := strings.Join(lines, "\n")
+	return &ToolResult{
+		ForLLM:  output,
+		ForUser: output,
+	}
+}
+
+func (t *AffineTool) readDoc(ctx context.Context, workspaceID, docID string) *ToolResult {
+	params := map[string]interface{}{
+		"docId": docID,
+	}
+
+	data, err := t.client.call(ctx, "doc-read", params)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("failed to read document: %v", err))
+	}
+
+	var doc struct {
+		DocID   string `json:"docId"`
+		Title   string `json:"title"`
+		Content string `json:"content"`
+	}
+
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return ErrorResult(fmt.Sprintf("failed to parse response: %v", err))
+	}
+
+	var lines []string
+	lines = append(lines, fmt.Sprintf("Title: %s", doc.Title))
+	lines = append(lines, fmt.Sprintf("ID: %s", doc.DocID))
+	lines = append(lines, "")
+	lines = append(lines, "Content:")
+	lines = append(lines, doc.Content)
+
+	output := strings.Join(lines, "\n")
+	return &ToolResult{
+		ForLLM:  output,
+		ForUser: output,
+	}
+}
+
+func (t *AffineTool) listDocs(ctx context.Context, workspaceID string, args map[string]any) *ToolResult {
+	limit := 10
+	if l, ok := args["limit"].(float64); ok {
+		limit = int(l)
+	}
+
+	params := map[string]interface{}{
+		"limit": limit,
+	}
+
+	data, err := t.client.call(ctx, "doc-keyword-search", params)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("failed to list documents: %v", err))
+	}
+
+	var docs []struct {
+		DocID string `json:"docId"`
+		Title string `json:"title"`
+	}
+
+	if err := json.Unmarshal(data, &docs); err != nil {
+		return ErrorResult(fmt.Sprintf("failed to parse response: %v", err))
+	}
+
+	if len(docs) == 0 {
+		return &ToolResult{
+			ForLLM:  "No documents found in workspace",
+			ForUser: "No documents found in workspace",
+		}
+	}
+
+	var lines []string
+	lines = append(lines, fmt.Sprintf("Documents in workspace (showing %d):", len(docs)))
+	for i, doc := range docs {
+		lines = append(lines, fmt.Sprintf("%d. %s (ID: %s)", i+1, doc.Title, doc.DocID))
+	}
+
+	output := strings.Join(lines, "\n")
+	return &ToolResult{
+		ForLLM:  output,
+		ForUser: output,
+	}
+}
 	query := `
 		query ListWorkspaces {
 			workspaces {
