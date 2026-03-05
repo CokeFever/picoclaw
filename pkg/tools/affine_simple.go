@@ -262,7 +262,8 @@ func (t *AffineSimpleTool) read(ctx context.Context, docID string) *ToolResult {
 
 	result, err := t.callMCP(ctx, reqBody)
 	if err != nil {
-		return ErrorResult(fmt.Sprintf("read failed: %v", err))
+		// If read_document fails, provide helpful error message
+		return ErrorResult(fmt.Sprintf("read_document failed: %v. Note: This tool may be unstable on Affine Cloud. Try using search instead to find document content.", err))
 	}
 
 	// Extract content from result
@@ -282,7 +283,7 @@ func (t *AffineSimpleTool) read(ctx context.Context, docID string) *ToolResult {
 	}
 
 	if content == "" {
-		content = fmt.Sprintf("Document ID: %s\n(Content could not be extracted)", docID)
+		return ErrorResult(fmt.Sprintf("Could not read document %s. The read_document tool may be unstable. Try using search to find this document's content.", docID))
 	}
 
 	output := fmt.Sprintf("Document: %s\n\n%s", title, content)
