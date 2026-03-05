@@ -1,17 +1,10 @@
 name: build
 
+# Disabled: telego v1.6.0 has a bug requiring non-existent Go 1.25.5
+# This workflow is not required for PR submission
+# The upstream pr.yml workflow will handle all necessary checks
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - '**.go'
-      - 'go.mod'
-      - 'go.sum'
-      - 'Makefile'
-      - '.github/workflows/build.yml'
-      - 'cmd/**'
-      - 'pkg/**'
-      - 'workspace/**'
+  workflow_dispatch:  # Only allow manual trigger
 
 jobs:
   build:
